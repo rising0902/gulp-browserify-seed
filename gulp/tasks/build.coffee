@@ -1,31 +1,77 @@
-gulp             = require('gulp-help')(require('gulp'))
-util             = require 'gulp-util'
-jade             = require 'gulp-jade'
-gulpPlumber      = require 'gulp-plumber'
-webpack          = require 'webpack'
-webpackDevServer = require 'webpack-dev-server'
-path             = require 'path'
+gulp       = require('gulp-help')(require('gulp'))
+browserify = require 'browserify'
+source     = require 'vinyl-source-stream'
+buffer     = require 'vinyl-buffer'
+plumber    = require 'gulp-plumber'
+util       = require 'gulp-util'
+uglify     = require 'gulp-uglify'
+watchify   = require 'watchify'
+assign     = require 'lodash.assign'
+sourcemaps = require 'gulp-sourcemaps'
+connect    = require 'gulp-connect'
 # load project's settings.
 settings         = require '../settings'
 
-console.log settings.src_root
-gulp.task 'jade', '', ->
-  gulp.src settings.src_root + "/*.jade"
-    .pipe gulpPlumber()
-    .pipe jade {pretty:true}
-    .pipe gulp.dest settings.dest_root
+#gulp.task 'coffee', '', ->
+#    browserify
+#      entries: ['./src/bootstrap.coffee']
+#      transform: ['coffeeify']
+#      extensions: ['.coffee']
+#      debug: true
+#    .bundle()
+#    .pipe source 'bundle.js'
+#    .pipe gulp.dest settings.dest_root
 
-gulp.task 'run-dev-server', '', (callback) ->
-  config = Object.create(settings.webpack)
-  config.devtool = "eval"
-  config.debug = true
+#watching = false
+#gulp.task 'enable-watch-mode', ->
+#  watching = true
 
-  server = new webpackDevServer(webpack(config), {
-    contentBase: settings.dest_root,
-    stats: {colors: true},
-    inline: true
-  })
+#gulp.task 'browserifya', watchify (watchify) ->
+#  gulp.src 'lib/index.js'
+#    .pipe watchify
+#      watch: watching
+#    .pipe gulp.dest settings.dest_root + '/bundle.js'
+#
+#gulp.task 'watchify', ['enable-watch-mode', 'browserifya']
+#
+#gulp.task 'watch', ['build', 'enable-watch-mode', 'watchify'], ->
+#  gulp.watch 'src/**/*.coffee', ['build:coffee']
 
-  server.listen 9000, (err) ->
-    if err
-      throw new util.PluginError 'webpack-dev-server', err
+gulp.task 'compile', '', ->
+
+  browserifyOption =
+    entries: ['./src/bootstrap.coffee']
+    transform: ['coffeeify']
+    extensions: ['.coffee']
+    debug: true
+
+  opts = assign {}, watchify.args, browserifyOption
+
+  bundler = watchify browserify 'src/bootstrap.coffee', opts
+#  console.log Object.keys(a)
+#  bundler = watchify a
+#  bundler = watchify browserify './src/bootstrap.coffee', option
+
+# bundler = browserify( config.src, config.browserify );
+
+  bundle = ->
+    return bundler
+      .bundle()
+      .on 'error', util.log.bind(util, 'Browserify Error')
+      .pipe source 'bundle.js'
+      .pipe buffer()
+      .pipe sourcemaps.init { loadMaps: true }
+      .pipe uglify()
+      .pipe sourcemaps.write '.'
+      .pipe gulp.dest settings.dest_root
+ 
+  bundler.on('update', bundle)
+  bundler.on 'log', util.log
+ 
+  bundle()
+
+gulp.task 'server', ->
+  connect.server
+    root: settings.dest_root
+    port: 8080
+    livereload: true
